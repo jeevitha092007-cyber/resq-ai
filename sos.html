@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResQ-AI - Send SOS</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; font-family: "Segoe UI", Arial, sans-serif;
+           background: #fff4f4; color: #222; display: flex; justify-content: center; }
+    .wrap { width: 100%; max-width: 520px; padding: 20px; }
+    h1 { margin: 10px 0 4px; color: #b3261e; font-size: 30px; }
+    .sub { margin: 0 0 18px; color: #555; }
+    label { font-weight: bold; display: block; margin-bottom: 8px; }
+    textarea { width: 100%; height: 160px; padding: 14px; font-size: 17px; border: 2px solid #d9a3a0;
+               border-radius: 10px; resize: vertical; font-family: inherit; }
+    textarea:focus { outline: none; border-color: #b3261e; }
+    button { width: 100%; margin-top: 14px; padding: 16px; font-size: 20px; font-weight: bold; color: white;
+             background: #d62828; border: none; border-radius: 10px; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    #result { margin-top: 16px; padding: 14px; border-radius: 10px; font-size: 16px; display: none; }
+    #result.ok { display: block; background: #e6f4ea; color: #1b5e20; border: 1px solid #b7dfc0; }
+    #result.err { display: block; background: #fdecea; color: #8a1c13; border: 1px solid #f5c2bd; }
+    .note { margin-top: 22px; font-size: 13px; color: #666; border-top: 1px solid #e5c9c7; padding-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Send SOS</h1>
+    <p class="sub">Tell us where you are, how many people need help, and what you need. Write in any language.</p>
+
+    <label for="msg">Describe your emergency</label>
+    <textarea id="msg" placeholder="Example: 6 people stuck near KR Puram flyover, my mother is injured, need ambulance"></textarea>
+    <button id="send">SEND FOR HELP</button>
+
+    <div id="result"></div>
+
+    <div class="note">
+      <b>Prototype notice:</b> ResQ-AI is a hackathon demo that uses simulated flood data.
+      In a real emergency in India, call <b>112</b>.
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById("send");
+    const box = document.getElementById("msg");
+    const result = document.getElementById("result");
+
+    btn.addEventListener("click", async function () {
+      const text = box.value.trim();
+      if (!text) return;
+
+      btn.disabled = true;
+      btn.textContent = "SENDING...";
+      result.className = "";
+      result.style.display = "none";
+
+      try {
+        const res = await fetch("/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        if (data.error) {
+          result.className = "err";
+          result.textContent = "We could not process your message right now. Please press the button again.";
+        } else {
+          box.value = "";
+          result.className = "ok";
+          result.textContent = "Your request has been received. Rescue coordinators can now see it. Stay where you are, keep your phone charged, and stay safe.";
+        }
+      } catch (e) {
+        result.className = "err";
+        result.textContent = "Could not reach the server. Please try again.";
+      }
+      btn.disabled = false;
+      btn.textContent = "SEND FOR HELP";
+    });
+  </script>
+</body>
+</html>

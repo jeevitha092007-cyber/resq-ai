@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ResQ-AI Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --line: #2a3344;
+      --text: #e6edf3; --muted: #8b98a9;
+      --crit: #ff4d4f; --high: #ff9f1a; --med: #f2c94c; --low: #2dd4a7; --ok: #3fb950;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; display: flex; flex-direction: column;
+           font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+    header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+             padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand b { font-size: 20px; letter-spacing: 1px; }
+    .brand span { color: var(--muted); font-size: 14px; }
+    .live { width: 10px; height: 10px; border-radius: 50%; background: var(--ok);
+            box-shadow: 0 0 0 0 rgba(63,185,80,.7); animation: live 2s infinite; }
+    @keyframes live { 0% { box-shadow: 0 0 0 0 rgba(63,185,80,.6); }
+                      100% { box-shadow: 0 0 0 10px rgba(63,185,80,0); } }
+    .sim { font-size: 12px; color: var(--med); border: 1px solid var(--med);
+           padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+
+    #counters { display: flex; gap: 12px; padding: 12px 20px; flex-wrap: wrap; }
+    .stat { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--c);
+            border-radius: 8px; padding: 8px 16px; min-width: 110px; }
+    .stat b { display: block; font-size: 26px; line-height: 1.1; }
+    .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+    #submit-bar { display: flex; gap: 10px; align-items: center; padding: 0 20px 12px; }
+    #msg { flex: 1; padding: 12px 14px; font-size: 15px; color: var(--text); background: var(--panel);
+           border: 1px solid var(--line); border-radius: 8px; outline: none; }
+    #msg:focus { border-color: #4c8dff; }
+    #send { padding: 12px 22px; font-size: 15px; font-weight: bold; color: white; background: #2f6feb;
+            border: none; border-radius: 8px; cursor: pointer; }
+    #send:hover { background: #4c8dff; }
+    #send:disabled { opacity: .5; cursor: wait; }
+    #status { min-width: 190px; font-size: 14px; color: var(--muted); }
+
+    #main { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--line); }
+    #map-wrap { flex: 1; position: relative; }
+    #map { position: absolute; inset: 0; background: #0b0f16; }
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9); }
+
+    .legend { position: absolute; left: 12px; bottom: 12px; z-index: 1000; background: rgba(22,27,34,.92);
+              border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+    .legend div { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+    .legend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+    #sidebar { width: 380px; overflow-y: auto; padding: 12px; background: var(--panel); border-left: 1px solid var(--line); }
+    #sidebar h3 { margin: 10px 4px 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+    .empty { color: var(--muted); font-size: 14px; padding: 8px 4px; }
+
+    .card { background: var(--panel2); border: 1px solid var(--line); border-left: 6px solid #666;
+            border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 14px; cursor: pointer; }
+    .card:hover { border-color: #4c8dff; }
+    .card .top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+    .badge { font-size: 11px; font-weight: bold; color: #111; padding: 2px 8px; border-radius: 999px; }
+    .place { font-weight: bold; }
+    .meta { color: var(--muted); margin: 2px 0; }
+    .med { color: #ffb4b4; margin: 2px 0; }
+    .tag { font-size: 12px; background: #2b3548; padding: 2px 8px; border-radius: 4px; margin-right: 4px; display: inline-block; margin-top: 4px; }
+    .verified { color: var(--ok); font-weight: bold; font-size: 13px; margin-top: 8px; }
+    .unverified { color: var(--med); font-size: 13px; margin-top: 8px; }
+    .approve-btn { margin-top: 6px; padding: 6px 14px; font-size: 13px; font-weight: bold; color: white;
+                   background: #238636; border: none; border-radius: 6px; cursor: pointer; }
+    .approve-btn:hover { background: #2ea043; }
+
+    .pin { position: relative; width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box;
+           border: 2px dashed rgba(255,255,255,.9); }
+    .pin.verified-pin { border: 3px solid #fff; }
+    .pin.u5::after { content: ""; position: absolute; inset: -2px; border-radius: 50%;
+                     border: 2px solid var(--crit); animation: pulse 1.6s ease-out infinite; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel2); color: var(--text); }
+    .leaflet-popup-content { margin: 8px; }
+    .leaflet-popup-content .card { margin: 0; border: none; border-left: 6px solid #666; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="live"></div>
+      <b>RESQ-AI</b>
+      <span>Bengaluru Emergency Dashboard</span>
+    </div>
+    <div class="sim">SIMULATED FLOOD DATA</div>
+  </header>
+
+  <div id="counters"></div>
+
+  <div id="submit-bar">
+    <input id="msg" type="text" placeholder="Simulate an incoming SOS from a victim, in any language...">
+    <button id="send">Simulate Incoming SOS</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="main">
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div class="legend">
+        <div><i style="background:#ff4d4f"></i> Critical (5)</div>
+        <div><i style="background:#ff9f1a"></i> High (4)</div>
+        <div><i style="background:#f2c94c"></i> Medium (3)</div>
+        <div><i style="background:#2dd4a7"></i> Low (1-2)</div>
+        <div style="color:#8b98a9">Dashed ring = unverified, solid = verified</div>
+      </div>
+    </div>
+    <div id="sidebar"></div>
+  </div>
+
+  <script>
+    window.addEventListener("error", function (e) {
+      document.getElementById("sidebar").innerHTML = "<b>Page error:</b> " + e.message;
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      document.getElementById("sidebar").innerHTML = "<b>Could not load data:</b> " + e.reason;
+    });
+  </script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const API = "http://127.0.0.1:8000";
+    const map = L.map("map").setView([12.9716, 77.5946], 11);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+    const markerLayer = L.layerGroup().addTo(map);
+
+    function esc(text) {
+      const d = document.createElement("div");
+      d.textContent = text == null ? "" : String(text);
+      return d.innerHTML;
+    }
+
+    function colorFor(u) {
+      if (u >= 5) return "#ff4d4f";
+      if (u === 4) return "#ff9f1a";
+      if (u === 3) return "#f2c94c";
+      return "#2dd4a7";
+    }
+
+    function labelFor(u) {
+      if (u >= 5) return "CRITICAL";
+      if (u === 4) return "HIGH";
+      if (u === 3) return "MEDIUM";
+      return "LOW";
+    }
+
+    function focusOn(lat, lng) {
+      map.setView([lat, lng], 15);
+    }
+
+    function cardHtml(r) {
+      const color = colorFor(r.urgency);
+      const reports = (r.report_count || 1) > 1
+        ? "<span class='tag'>" + esc(r.report_count) + " reports</span>" : "";
+      const verifyBlock = r.verified
+        ? "<div class='verified'>&#10004; Verified by coordinator</div>"
+        : "<div class='unverified'>AI-extracted, unverified</div>" +
+          "<button class='approve-btn' onclick='event.stopPropagation(); approve(" + Number(r.id) + ")'>Approve</button>";
+      const click = (r.lat != null && r.lng != null)
+        ? "onclick='focusOn(" + Number(r.lat) + "," + Number(r.lng) + ")'" : "";
+      return `<div class="card" style="border-left-color:${color}" ${click}>
+        <div class="top">
+          <span class="badge" style="background:${color}">${labelFor(r.urgency)} &middot; ${esc(r.urgency)}</span>
+          <span class="place">${esc(r.location_text || "Location unknown")}</span>
+          ${reports}
+        </div>
+        <div class="meta">${esc(r.people_count ?? "?")} people &middot; ${esc(String(r.situation).replace("_", " "))}</div>
+        ${r.medical_details ? "<div class='med'>Medical: " + esc(r.medical_details) + "</div>" : ""}
+        <div>${r.needs.map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
+        ${verifyBlock}
+      </div>`;
+    }
+
+    async function approve(id) {
+      await fetch(API + "/requests/" + id + "/approve", { method: "POST" });
+      await load();
+    }
+
+    function pinIcon(r) {
+      const cls = "pin u" + (r.urgency >= 5 ? "5" : "x") + (r.verified ? " verified-pin" : "");
+      return L.divIcon({
+        className: "",
+        html: "<div class='" + cls + "' style='background:" + colorFor(r.urgency) + "'></div>",
+        iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -12]
+      });
+    }
+
+    async function load() {
+      const res = await fetch(API + "/requests");
+      const all = await res.json();
+      const open = all.filter(r => r.status === "open");
+
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+      open.forEach(r => {
+        if (r.urgency >= 5) counts.critical++;
+        else if (r.urgency === 4) counts.high++;
+        else if (r.urgency === 3) counts.medium++;
+        else counts.low++;
+      });
+      const verifiedCount = open.filter(r => r.verified).length;
+      document.getElementById("counters").innerHTML =
+        `<div class="stat" style="--c:var(--crit)"><b>${counts.critical}</b><span>Critical</span></div>
+         <div class="stat" style="--c:var(--high)"><b>${counts.high}</b><span>High</span></div>
+         <div class="stat" style="--c:var(--med)"><b>${counts.medium}</b><span>Medium</span></div>
+         <div class="stat" style="--c:var(--low)"><b>${counts.low}</b><span>Low</span></div>
+         <div class="stat" style="--c:var(--ok)"><b>${verifiedCount} / ${open.length}</b><span>Verified</span></div>`;
+
+      markerLayer.clearLayers();
+      open.forEach(r => {
+        if (r.lat != null && r.lng != null) {
+          L.marker([r.lat, r.lng], { icon: pinIcon(r) })
+            .addTo(markerLayer).bindPopup(cardHtml(r));
+        }
+      });
+
+      const located = open.filter(r => r.lat != null);
+      const unlocated = open.filter(r => r.lat == null);
+      let html = "<h3>Incoming Emergency Reports</h3>" +
+        (located.length ? located.map(cardHtml).join("") : "<div class='empty'>No incidents yet.</div>");
+      html += "<h3>Needs location follow-up</h3>" +
+        (unlocated.length ? unlocated.map(cardHtml).join("") : "<div class='empty'>None</div>");
+      document.getElementById("sidebar").innerHTML = html;
+    }
+
+    async function sendSOS() {
+      const input = document.getElementById("msg");
+      const status = document.getElementById("status");
+      const button = document.getElementById("send");
+      const text = input.value.trim();
+      if (!text) return;
+
+      button.disabled = true;
+      status.textContent = "Analyzing...";
+      try {
+        const res = await fetch(API + "/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        if (data.error) {
+          status.textContent = data.error;
+        } else {
+          input.value = "";
+          status.textContent = data.merged ? "Merged with an existing incident" : "Added: urgency " + data.urgency;
+          await load();
+        }
+      } catch (e) {
+        status.textContent = "Failed: " + e.message;
+      }
+      button.disabled = false;
+    }
+
+    document.getElementById("send").addEventListener("click", sendSOS);
+    document.getElementById("msg").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") sendSOS();
+    });
+
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>
